@@ -1,0 +1,81 @@
+---
+title: "Wearable Device Data Classification"
+author: "Huiting Su"
+date: "January 30, 2018"
+output: html_document
+---
+ 
+##Synopsis
+In this project, the goal is to predict the manner in which a person did a specific exercise movements using data collected by wearable devices. Six participants was asked to perform barbell lifts in 5 ways for 10 repetitions. Class A is the correct movement, while the other 4 ways are common mistakes. With the data set, classification models are fitted, and the model with greatest performance is selected to predict 20 cases. The data for this project come from this [source](http://groupware.les.inf.puc-rio.br/har). For more information, visit [website](http://groupware.les.inf.puc-rio.br/har). 
+
+##Data Cleaning
+```{r, warning=FALSE, message=FALSE}
+library(caret)
+library(rattle)
+```
+
+Load the data.
+```{r}
+pml.training <- read.csv("pml-training.csv",na.strings=c("NA","#DIV/0!",""))
+pml.testing <- read.csv("pml-testing.csv",na.strings=c("NA","#DIV/0!",""))
+dim(pml.training)
+```
+
+A brief view of the dataset shows that there are a lot of variables which are almost empty. Drop the variables with more than 80% "NA". There are 60 variables dropped in total.
+```{r}
+NAcols <- colSums(is.na.data.frame(pml.training))>nrow(pml.training)*0.8
+pml.training <- pml.training[,!NAcols]
+pml.training <- pml.training[,-(1:7)]
+print(ncol(pml.training))
+```
+
+##Model Fitting
+I use several algorithms to fit models, and compare the accuracy of them to select the best model. Classification accuracy is the ratio of correct predictions to total predictions made.
+
+###Set Up
+As the class of "testing" set is actually unknown, the "training" set has to be devided into real training and testing set. In this way I can measure the out-of-sample error of the fitted model. Also, 5-fold cross validation is used in modeling. 
+```{r}
+set.seed(3234)
+InTrain <- createDataPartition(pml.training$classe, p=0.7, list=FALSE)
+train <- pml.training[InTrain,] 
+test <- pml.training[-InTrain,]
+control <- trainControl(method = "cv", number = 5)
+```
+
+###Classification Trees
+```{r}
+set.seed(61287)
+fit.rpart <- train(classe~., method="rpart", trControl=control, data=train)
+print(fit.rpart)
+fancyRpartPlot(fit.rpart$finalModel)
+```
+
+```{r}
+pdt.rpart <- predict(fit.rpart, test)
+confusionMatrix(pdt.rpart, test$classe)$overall[1]
+```
+The accuracy of classification tree in this case is quite poor.
+
+###Boosting
+```{r, CACHE=TRUE}
+fit.gbm <- train(classe~., method="gbm", trControl=control, data=train, verbose=FALSE)
+```
+
+```{r}
+pdt.gbm <- predict(fit.gbm, test)
+confusionMatrix(pdt.gbm, test$classe)$overall[1]
+```
+
+###Random Forest
+```{r, CACHE=TRUE}
+fit.rf <- train(classe~., method="rf", trControl=control, data=train)
+pdt.rf <- predict(fit.rf, test)
+confusionMatrix(pdt.rf, test$classe)$overall[1]
+```
+The accuracy of random forest is the highest.
+
+##Prediction
+Having the highest accuracy, which means the lowest out-of-sample error, random forest is selected to predict the 20 cases. 
+```{r}
+predict(fit.rf, pml.testing)
+```
